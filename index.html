@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>另類邏輯播放器 - 實戰版</title>
+    <style>
+        :root {
+            --bg: #0d0d0d;
+            --panel: #1a1a1a;
+            --accent: #00f2ff; /* 霓虹藍 */
+            --text: #ffffff;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+        }
+
+        .player-card {
+            background: var(--panel);
+            padding: 2.5rem;
+            border-radius: 30px;
+            box-shadow: 0 0 50px rgba(0, 242, 255, 0.2);
+            width: 380px;
+            border: 1px solid rgba(0, 242, 255, 0.3);
+        }
+
+        h2 { text-align: center; color: var(--accent); letter-spacing: 5px; margin-bottom: 30px; }
+
+        .control-group {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 15px;
+            border-left: 4px solid var(--accent);
+        }
+
+        label { display: block; margin-bottom: 15px; font-weight: bold; color: var(--accent); }
+
+        /* 滑桿美化 */
+        input[type=range] {
+            width: 100%;
+            height: 10px;
+            background: #333;
+            border-radius: 5px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 25px;
+            height: 25px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent);
+        }
+
+        /* 離散按鈕 */
+        .discrete-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .discrete-btn {
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            padding: 10px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .discrete-btn.active {
+            background: var(--accent);
+            color: #000;
+            box-shadow: 0 0 15px var(--accent);
+        }
+
+        .status-display {
+            text-align: right;
+            font-family: 'Courier New', Courier, monospace;
+            color: #555;
+            font-size: 0.8rem;
+            margin-top: 10px;
+        }
+
+        .instruction-box {
+            font-size: 0.85rem;
+            color: #888;
+            line-height: 1.6;
+            background: #000;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        #file-selector {
+            margin-bottom: 20px;
+            width: 100%;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+<div class="player-card">
+    <h2>REVERSE</h2>
+
+    <input type="file" id="file-selector" accept="audio/*">
+
+    <div class="control-group">
+        <label>POWER (播放動力)</label>
+        <input type="range" id="power-slider" min="0" max="100" value="0">
+        <div class="status-display" id="play-status">等待動力注入...</div>
+    </div>
+
+    <div class="control-group">
+        <label>FRICTION (進度摩擦)</label>
+        <input type="range" id="scrub-slider" min="0" max="100" value="50">
+        <div class="status-display" id="time-display">00:00</div>
+    </div>
+
+    <div class="control-group">
+        <label>OUTPUT (音量檔位)</label>
+        <div class="discrete-grid">
+            <button class="discrete-btn" onclick="setVol(0, this)">靜音</button>
+            <button class="discrete-btn" onclick="setVol(0.3, this)">低溫</button>
+            <button class="discrete-btn active" onclick="setVol(0.6, this)">中感</button>
+            <button class="discrete-btn" onclick="setVol(1.0, this)">爆裂</button>
+        </div>
+    </div>
+
+    <div class="instruction-box">
+        <b>💡 反轉指令集：</b><br>
+        1. <b>播放：</b> 需手動將動力推至 <b>50% 以上</b>。<br>
+        2. <b>跳轉：</b> 左右反覆撥動「摩擦」滑桿來前進或後退。<br>
+        3. <b>音量：</b> 禁止微調，僅限固定檔位。
+    </div>
+</div>
+
+<audio id="main-audio" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"></audio>
+
+<script>
+    const audio = document.getElementById('main-audio');
+    const powerSlider = document.getElementById('power-slider');
+    const scrubSlider = document.getElementById('scrub-slider');
+    const playStatus = document.getElementById('play-status');
+    const timeDisplay = document.getElementById('time-display');
+    const fileSelector = document.getElementById('file-selector');
+
+    // 檔案載入邏輯
+    fileSelector.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            audio.src = URL.createObjectURL(file);
+            playStatus.innerText = "音樂已就緒，請推動桿子";
+        }
+    });
+
+    // 1. 播放控制 (離散 -> 連續)
+    powerSlider.addEventListener('input', () => {
+        const val = powerSlider.value;
+        if (val > 50) {
+            audio.play().catch(e => console.log("等待用戶交互"));
+            playStatus.innerText = "運作中: " + val + "%";
+            playStatus.style.color = "#00f2ff";
+        } else {
+            audio.pause();
+            playStatus.innerText = "動力不足，已停機";
+            playStatus.style.color = "#ff4444";
+        }
+    });
+
+    // 2. 進度控制 (離散 -> 連續)
+    let lastPos = 50;
+    scrubSlider.addEventListener('input', () => {
+        const currentPos = scrubSlider.value;
+        const diff = currentPos - lastPos;
+        // 撥動一次移動 1 秒
+        audio.currentTime += diff * 0.8; 
+        lastPos = currentPos;
+    });
+
+    // 放手時滑桿彈回中間 (模擬物理感)
+    scrubSlider.addEventListener('change', () => {
+        scrubSlider.value = 50;
+        lastPos = 50;
+    });
+
+    // 3. 音量控制 (連續 -> 離散)
+    function setVol(v, btn) {
+        audio.volume = v;
+        document.querySelectorAll('.discrete-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+
+    // 更新時間
+    audio.addEventListener('timeupdate', () => {
+        const m = Math.floor(audio.currentTime / 60);
+        const s = Math.floor(audio.currentTime % 60);
+        timeDisplay.innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+    });
+</script>
+
+</body>
+</html>
